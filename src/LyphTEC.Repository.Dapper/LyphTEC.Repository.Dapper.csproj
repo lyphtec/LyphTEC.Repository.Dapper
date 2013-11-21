@@ -104,30 +104,35 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\DapperExtensions.1.4.3\lib\net40\DapperExtensions.dll</HintPath>
     </Reference>
-    <Reference Include="LyphTEC.Repository, Version=0.7.1.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="LyphTEC.Repository, Version=0.7.2.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\LyphTEC.Repository.0.7.1\lib\net45\LyphTEC.Repository.dll</HintPath>
+      <HintPath>..\packages\LyphTEC.Repository.0.7.2\lib\net45\LyphTEC.Repository.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Text, Version=3.9.59.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceStack.Text, Version=3.9.70.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\ServiceStack.Text.3.9.62\lib\net35\ServiceStack.Text.dll</HintPath>
+      <HintPath>..\packages\ServiceStack.Text.3.9.70\lib\net35\ServiceStack.Text.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
-    <Reference Include="System.Composition.AttributedModel">
-      <HintPath>..\packages\Microsoft.Composition.1.0.17\lib\portable-net45+win8\System.Composition.AttributedModel.dll</HintPath>
+    <Reference Include="System.Composition.AttributedModel, Version=1.0.20.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Composition.1.0.20\lib\portable-net45+win8\System.Composition.AttributedModel.dll</HintPath>
     </Reference>
-    <Reference Include="System.Composition.Convention">
-      <HintPath>..\packages\Microsoft.Composition.1.0.17\lib\portable-net45+win8\System.Composition.Convention.dll</HintPath>
+    <Reference Include="System.Composition.Convention, Version=1.0.20.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Composition.1.0.20\lib\portable-net45+win8\System.Composition.Convention.dll</HintPath>
     </Reference>
-    <Reference Include="System.Composition.Hosting">
-      <HintPath>..\packages\Microsoft.Composition.1.0.17\lib\portable-net45+win8\System.Composition.Hosting.dll</HintPath>
+    <Reference Include="System.Composition.Hosting, Version=1.0.20.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Composition.1.0.20\lib\portable-net45+win8\System.Composition.Hosting.dll</HintPath>
     </Reference>
-    <Reference Include="System.Composition.Runtime">
-      <HintPath>..\packages\Microsoft.Composition.1.0.17\lib\portable-net45+win8\System.Composition.Runtime.dll</HintPath>
+    <Reference Include="System.Composition.Runtime, Version=1.0.20.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Composition.1.0.20\lib\portable-net45+win8\System.Composition.Runtime.dll</HintPath>
     </Reference>
-    <Reference Include="System.Composition.TypedParts">
-      <HintPath>..\packages\Microsoft.Composition.1.0.17\lib\portable-net45+win8\System.Composition.TypedParts.dll</HintPath>
+    <Reference Include="System.Composition.TypedParts, Version=1.0.20.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Composition.1.0.20\lib\portable-net45+win8\System.Composition.TypedParts.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
