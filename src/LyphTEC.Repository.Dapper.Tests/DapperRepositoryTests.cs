@@ -1,42 +1,38 @@
-﻿using System;
+﻿using Dapper;
+using LyphTEC.Repository.Dapper.Tests.Extensions;
+using LyphTEC.Repository.Dapper.Tests.Model;
+using ServiceStack.Text;
+using System;
 using System.Collections.Generic;
 using System.Composition;
 using System.Composition.Hosting;
-using System.Data;
-using System.Data.SqlServerCe;
-using System.IO;
 using System.Linq;
-using Dapper;
-using DapperExtensions.Sql;
-using LyphTEC.Repository.Dapper.Tests.Model;
-using ServiceStack.Text;
 using Xunit;
-using LyphTEC.Repository.Dapper.Tests.Extensions;
 
 // ReSharper disable InconsistentNaming
 namespace LyphTEC.Repository.Dapper.Tests
 {
     public class DapperRepositoryTests : IUseFixture<DapperRepositoryFixture>
     {
+        private DapperRepositoryFixture _fixture;
         private DapperRepository<Customer> _repo;
-        private IDbConnection _db;
-
+        
         #region IUseFixture<CommonRepositoryFixture> Members
 
         public void SetFixture(DapperRepositoryFixture data)
         {
-            _db = data.CreateDbConnection();
-
-            data.ExecuteScript("CreateCustomerTable");
-
-            _repo = new DapperRepository<Customer>(_db);
+            _fixture = data;
+            _repo = new DapperRepository<Customer>(data.Settings);
         }
 
         #endregion
 
         public void ClearRepo()
         {
-            _db.Execute("delete from Customer");
+            using (var db = _fixture.GetDbConnection())
+            {
+                db.Execute("delete from Customer");
+            }
         }
 
         private void DumpRepo()
@@ -211,7 +207,22 @@ namespace LyphTEC.Repository.Dapper.Tests
         [Fact]
         public void CustomMapping_Save_Ok()
         {
+            var repo = new DapperRepository<Customer>(_fixture.Settings, () =>
+            {
+                DapperExtensions.DapperExtensions.DefaultMapper = typeof (CustomMapper<>);
+            });
+
+            ClearRepo();
+
+            var cust = NewCustomer();
+
+            var newCust = repo.Save(cust);
+
+            Assert.Equal(1, repo.Count());
+            Assert.NotNull(newCust);
             
+            DumpRepo();
+            newCust.PrintDump();
         }
 
         [Import]
@@ -220,11 +231,9 @@ namespace LyphTEC.Repository.Dapper.Tests
         [Fact]
         public void MEF_Ok()
         {
-            var db = new SqlCeConnection(_db.ConnectionString) as IDbConnection;
-
             var config = new ContainerConfiguration()
                 .WithAssembly(typeof (DapperRepository<>).Assembly)
-                .WithExport(db);
+                .WithExport(_fixture.Settings);
 
             using (var container = config.CreateContainer())
             {

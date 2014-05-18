@@ -16,7 +16,7 @@ namespace LyphTEC.Repository.Dapper
             Table(type.Name);
 
             Map(x => x.Id).Key(KeyType.Identity);
-
+            
             AutoMap();
         }
 

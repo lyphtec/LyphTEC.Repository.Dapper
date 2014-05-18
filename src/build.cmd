@@ -9,5 +9,5 @@ if "%config%" == "" (
 rem del _artifacts\"%config%"\*.dll
 
 if "%config%" == "Release" (
-    xcopy _artifacts\"%config%"\*.nupkg D:\Development\LocalNuGet\LocalNuGet\Packages\ /F /Y
+    xcopy _artifacts\"%config%"\*.nupkg %userprofile%\.nuget /F /Y
 )

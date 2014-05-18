@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Data.SqlServerCe;
 using System.IO;
@@ -14,43 +15,54 @@ namespace LyphTEC.Repository.Dapper.Tests
 {
     public class DapperRepositoryFixture
     {
-        private IDbConnection _db;
+        private readonly string _dbConnString;
+        private readonly ConnectionStringSettings _settings;
 
-        public IDbConnection CreateDbConnection()
+        public DapperRepositoryFixture()
         {
             Cleanup();
 
-            var connString = string.Format("Data Source=.\\dapperRepositoryTest_{0}.sdf", Guid.NewGuid());
-            var connectionParts = connString.Split(';');
-            var file = connectionParts
-                .ToDictionary(k => k.Split('=')[0], v => v.Split('=')[1])
-                .Where(d => d.Key.Equals("Data Source", StringComparison.OrdinalIgnoreCase))
-                .Select(k => k.Value).Single();
-
+            var file = string.Format("dapperRepoTest_{0}.sdf", Guid.NewGuid().ToString("N"));
+            _dbConnString = string.Format("Data Source=.\\{0}", file);
+            
             if (File.Exists(file))
                 File.Delete(file);
 
             // DapperExtensions needs to know the SqlDialect if not using the default SqlServerDialect
             DapperExtensions.DapperExtensions.SqlDialect = new SqlCeDialect();
 
-            using (var ce = new SqlCeEngine(connString))
+            using (var ce = new SqlCeEngine(_dbConnString))
             {
                 ce.CreateDatabase();
             }
 
-            _db = new SqlCeConnection(connString);
+            ExecuteScript("CreateCustomerTable");
 
-            return _db;
+            _settings = new ConnectionStringSettings("DapperTest", _dbConnString, "System.Data.SqlServerCe.4.0");
         }
 
-        public int ExecuteScript(string scriptName)
+        public ConnectionStringSettings Settings
         {
-            if (_db.State != ConnectionState.Open)
-                _db.Open();
+            get { return _settings; }
+        }
 
-            var result = _db.Execute(ReadScriptFile(scriptName));
+        public IDbConnection GetDbConnection()
+        {
+            var db = new SqlCeConnection(_dbConnString);
 
-            _db.Close();
+            return db;
+        }
+
+        int ExecuteScript(string scriptName)
+        {
+            var db = GetDbConnection();
+
+            if (db.State != ConnectionState.Open)
+                db.Open();
+
+            var result = db.Execute(ReadScriptFile(scriptName));
+
+            db.Close();
 
             return result;
         }
