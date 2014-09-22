@@ -1,15 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Dapper;
+using DapperExtensions.Sql;
+using ServiceStack.Text;
+using System;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlServerCe;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Dapper;
-using DapperExtensions.Sql;
-using ServiceStack.Text;
 
 namespace LyphTEC.Repository.Dapper.Tests
 {
@@ -20,6 +16,8 @@ namespace LyphTEC.Repository.Dapper.Tests
 
         public DapperRepositoryFixture()
         {
+            AssemblyUtils.SetEntryAssembly();
+
             Cleanup();
 
             var file = string.Format("dapperRepoTest_{0}.sdf", Guid.NewGuid().ToString("N"));

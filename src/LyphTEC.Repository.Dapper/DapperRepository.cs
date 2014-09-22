@@ -1,4 +1,5 @@
-﻿using Dapper;
+﻿using System.Reflection;
+using Dapper;
 using DapperExtensions;
 using System;
 using System.Collections.Generic;
@@ -53,6 +54,11 @@ namespace LyphTEC.Repository.Dapper
             _isInitialised = true;
         }
 
+        static DapperRepository()
+        {
+            DapperHelpers.ConfigureTypeHandlers();
+        }
+
         private IDbConnection CreateDbConnection()
         {
             var db = _factory.CreateConnection();
@@ -75,6 +81,16 @@ namespace LyphTEC.Repository.Dapper
 
             //DapperExtensions.DapperExtensions.SetMappingAssemblies(new List<Assembly> { typeof(DapperRepository<>).Assembly });
             DapperExtensions.DapperExtensions.DefaultMapper = typeof (CustomClassMapper<>);
+        }
+
+        /// <summary>
+        /// Specifies additional assemblies to find <see cref="IValueObject"/> to register as <see cref="SqlMapper.ITypeHandler"/> for Dapper <see cref="SqlMapper"/>
+        /// </summary>
+        /// <param name="assemblies">Assemblies to add</param>
+        /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
+        public void SetValueObjectAssemblies(params Assembly[] assemblies)
+        {
+            DapperHelpers.AddValueObjectTypeHandlers(assemblies);
         }
 
         #region IRepository<TEntity> Members
@@ -182,25 +198,17 @@ namespace LyphTEC.Repository.Dapper
 
         public TEntity Save(TEntity entity)
         {
-            var db = CreateDbConnection();
-
-            // Insert
-            if (entity.Id == null)
+            using (var db = CreateDbConnection())
             {
-                db.Insert(entity);
+                // Insert
+                if (entity.Id == null)
+                    db.Insert(entity);
+                else
+                    db.Update(entity);
+
+                db.Close();
+                db.Dispose();
             }
-            else
-            {
-                var dbRecord = db.Get<TEntity>((object)entity.Id);
-
-                if (dbRecord == null)
-                    throw new ArgumentException("Entity does not exist in Db. Cannot update.", "entity");
-
-                db.Update(entity);
-            }
-
-            db.Close();
-            db.Dispose();
 
             return entity;
         }

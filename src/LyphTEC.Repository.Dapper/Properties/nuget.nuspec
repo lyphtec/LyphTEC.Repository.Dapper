@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata>
+  <metadata schemaVersion="2">
     <id>$id$</id>
     <title>$description$</title>
     <version>$version$</version>
@@ -12,8 +12,15 @@
     <tags>lyphtec repository mongodb</tags>
     <projectUrl>https://github.com/lyphtec/LyphTEC.Repository.Dapper</projectUrl>
     <language>en-AU</language>
-    <copyright>Copyright © 2013. LyphTEC (lyphtec@gmail.com)</copyright>
+    <copyright>Copyright © 2013-2014. LyphTEC (lyphtec@gmail.com)</copyright>
     <frameworkAssemblies>
     </frameworkAssemblies>
+    <dependencies>
+      <dependency id="ServiceStack.Text" version="[3,4]" />
+    </dependencies>
+    <releaseNotes>
+      0.4.0
+        * Supports IValueObject mappings stored as JSON
+    </releaseNotes>
   </metadata>
 </package>

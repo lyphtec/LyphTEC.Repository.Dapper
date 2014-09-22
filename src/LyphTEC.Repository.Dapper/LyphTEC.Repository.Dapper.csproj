@@ -97,20 +97,19 @@
     <CodeContractsAnalysisWarningLevel>0</CodeContractsAnalysisWarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Dapper, Version=1.12.1.1, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Dapper, Version=1.34.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Dapper.1.13\lib\net45\Dapper.dll</HintPath>
+      <HintPath>..\packages\Dapper.1.34\lib\net45\Dapper.dll</HintPath>
     </Reference>
-    <Reference Include="DapperExtensions, Version=1.4.3.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="DapperExtensions, Version=1.4.5.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\DapperExtensions.1.4.3\lib\net40\DapperExtensions.dll</HintPath>
+      <HintPath>..\packages\DapperExtensions.1.4.5\lib\net40\DapperExtensions.dll</HintPath>
     </Reference>
-    <Reference Include="LyphTEC.Repository, Version=0.7.3.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="LyphTEC.Repository, Version=0.7.4.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\LyphTEC.Repository.0.7.3\lib\net45\LyphTEC.Repository.dll</HintPath>
+      <HintPath>..\packages\LyphTEC.Repository.0.7.4\lib\net45\LyphTEC.Repository.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceStack.Text, Version=3.9.71.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="ServiceStack.Text">
       <HintPath>..\packages\ServiceStack.Text.3.9.71\lib\net35\ServiceStack.Text.dll</HintPath>
     </Reference>
     <Reference Include="System" />
@@ -152,7 +151,13 @@
     <Compile Include="DapperHelpers.cs" />
     <Compile Include="DapperRepository.cs" />
     <Compile Include="Expressions\Evaluator.cs" />
+    <Compile Include="IdTypeHandler.cs">
+      <DependentUpon>DapperHelpers.cs</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ValueObjectHandler.cs">
+      <DependentUpon>DapperHelpers.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

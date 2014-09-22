@@ -1,9 +1,10 @@
 ﻿using Dapper;
 using LyphTEC.Repository.Dapper.Tests.Extensions;
 using LyphTEC.Repository.Dapper.Tests.Model;
+using LyphTEC.Repository.Tests;
+using LyphTEC.Repository.Tests.Domain;
 using ServiceStack.Text;
 using System;
-using System.Collections.Generic;
 using System.Composition;
 using System.Composition.Hosting;
 using System.Linq;
@@ -12,7 +13,7 @@ using Xunit;
 // ReSharper disable InconsistentNaming
 namespace LyphTEC.Repository.Dapper.Tests
 {
-    public class DapperRepositoryTests : IUseFixture<DapperRepositoryFixture>
+    public class DapperRepositoryTests : CommonRepositoryTest, IUseFixture<DapperRepositoryFixture>
     {
         private DapperRepositoryFixture _fixture;
         private DapperRepository<Customer> _repo;
@@ -23,11 +24,16 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             _fixture = data;
             _repo = new DapperRepository<Customer>(data.Settings);
+
+            // since our test data entities live in a referenced assembly, we need to manually add it so the IValueObject can be found and registered as a type handler
+            _repo.SetValueObjectAssemblies(typeof(Address).Assembly);
+
+            CustomerRepo = _repo;
         }
 
         #endregion
 
-        public void ClearRepo()
+        public override void ClearRepo()
         {
             using (var db = _fixture.GetDbConnection())
             {
@@ -35,35 +41,6 @@ namespace LyphTEC.Repository.Dapper.Tests
             }
         }
 
-        private void DumpRepo()
-        {
-            _repo.All().PrintDump();
-        }
-
-        private static Customer NewCustomer(string firstName = "John", string lastName = "Smith", string email = "jsmith@acme.com", string company = "ACME")
-        {
-            var cust = new Customer
-            {
-                FirstName = firstName,
-                LastName = lastName,
-                Company = company,
-                Email = email
-            };
-
-            return cust;
-        }
-
-        private static IEnumerable<Customer> NewCustomers()
-        {
-            var custs = new List<Customer>
-                            {
-                                NewCustomer(),
-                                NewCustomer("Jane", "Doe", "jdoe@acme.com"),
-                                NewCustomer("Jack", "Wilson", "jwilson@acme.com")
-                            };
-
-            return custs;
-        }
 
         [Fact]
         public void Save_Ok()
@@ -71,11 +48,13 @@ namespace LyphTEC.Repository.Dapper.Tests
             ClearRepo();
 
             var cust = NewCustomer();
+            cust.Address = NewAddress();
 
             var newCust = _repo.Save(cust);
 
             Assert.Equal(1, _repo.Count());
             Assert.NotNull(newCust);
+            Assert.Equal("Hidden Valley", newCust.Address.City);
             
             DumpRepo();
             newCust.PrintDump();
@@ -215,6 +194,7 @@ namespace LyphTEC.Repository.Dapper.Tests
             ClearRepo();
 
             var cust = NewCustomer();
+            cust.Address = NewAddress();
 
             var newCust = repo.Save(cust);
 
