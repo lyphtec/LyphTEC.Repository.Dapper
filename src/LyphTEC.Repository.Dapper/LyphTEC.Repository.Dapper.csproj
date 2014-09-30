@@ -97,9 +97,9 @@
     <CodeContractsAnalysisWarningLevel>0</CodeContractsAnalysisWarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Dapper, Version=1.34.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Dapper, Version=1.35.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Dapper.1.34\lib\net45\Dapper.dll</HintPath>
+      <HintPath>..\packages\Dapper.1.35\lib\net45\Dapper.dll</HintPath>
     </Reference>
     <Reference Include="DapperExtensions, Version=1.4.5.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -146,7 +146,7 @@
     <Compile Include="..\Common\CommonAssemblyInfo.cs">
       <Link>Properties\CommonAssemblyInfo.cs</Link>
     </Compile>
-    <Compile Include="CustomClassMapper.cs" />
+    <Compile Include="DefaultClassMapper.cs" />
     <Compile Include="Expressions\DapperExpressionVisitor.cs" />
     <Compile Include="Helpers.cs" />
     <Compile Include="DapperRepository.cs" />

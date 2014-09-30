@@ -10,110 +10,129 @@ using LyphTEC.Repository.Tests.Domain;
 using ServiceStack.Text;
 using Xunit;
 
-// ReSharper disable InconsistentNaming
-namespace LyphTEC.Repository.Dapper.Tests.SqlCe
+namespace LyphTEC.Repository.Dapper.Tests.SqlServer
 {
-    public class SqlCeRepositoryTests : CommonRepositoryTest, IUseFixture<SqlCeRepositoryFixture>
+    public class SqlServerRepositoryTests : CommonRepositoryTest, IUseFixture<SqlServerRepositoryFixture>
     {
-        private SqlCeRepositoryFixture _fixture;
+        private SqlServerRepositoryFixture _fixture;
         private DapperRepository<Customer> _customerRepo;
-        private DapperRepository<GuidEntity> _geRepo;
-        
-        #region IUseFixture<CommonRepositoryFixture> Members
+        private DapperRepository<Invoice> _invoiceRepo;
 
-        public void SetFixture(SqlCeRepositoryFixture data)
+        public void SetFixture(SqlServerRepositoryFixture data)
         {
             _fixture = data;
+
             _customerRepo = new DapperRepository<Customer>(data.Settings);
-            _geRepo = new DapperRepository<GuidEntity>(data.Settings);
+            _invoiceRepo = new DapperRepository<Invoice>(data.Settings);
 
             CustomerRepo = _customerRepo;
         }
 
-        #endregion
-
-        public override void ClearRepo()
+        void ClearCustomerRepo()
         {
-            using (var db = _fixture.GetDbConnection())
+            using (var db = _fixture.CreateOpenDbConnection())
             {
-                db.Execute("delete from Customer");
-                db.Execute("delete from GuidEntity");
+                db.Execute("truncate table [Customer];");
             }
         }
 
+        void ClearInvoiceRepo()
+        {
+            using (var db = _fixture.CreateOpenDbConnection())
+            {
+                db.Execute("truncate table [Invoice];");
+            }
+        }
+
+        public override void ClearRepo()
+        {
+            ClearCustomerRepo();
+            ClearInvoiceRepo();
+        }
 
         [Fact]
-        public void Save_Ok()
+        public void SaveInsert_Customer_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             var cust = NewCustomer();
             cust.Address = NewAddress();
-            cust.Address.DateAdded = new DateTime(2016, 1, 1);
+            var dateAdded = new DateTime(2016, 1, 1);
+            cust.Address.DateAdded = dateAdded;
 
-            var newCust = _customerRepo.Save(cust);
+            var saved = _customerRepo.Save(cust);
 
-            Assert.Equal(1, _customerRepo.Count());
-            Assert.NotNull(newCust);
-            Assert.Equal("Hidden Valley", newCust.Address.City);
-            
-            DumpRepo();
-            newCust.PrintDump();
+            Assert.Equal(1, saved.Id);
+            Assert.Equal("Hidden Valley", saved.Address.City);
+            Assert.Equal(dateAdded, saved.Address.DateAdded);
+
+            saved.PrintDump();
         }
 
         [Fact]
-        public void Save_GuidEntity_Ok()
+        public void SaveUpdate_Customer_Ok()
         {
-            var entity = _fixture.NewGuidEntity();
-            entity.Address= NewAddress(city: "Mod City");
-
-            var result = _geRepo.Save(entity);
-
-            Assert.NotNull(result.Id);
-            Assert.IsType<Guid>(result.Id);
-            Assert.Equal("Mod City", result.Address.City);
-            
-            result.PrintDump();
-        }
-
-        [Fact]
-        public void Save_Update_Ok()
-        {
-            ClearRepo();
+            ClearCustomerRepo();
 
             var cust = _customerRepo.Save(NewCustomer());
-
             var before = cust.Email;
 
             cust.Email = "updated@me.com";
-            
+
             var result = _customerRepo.Save(cust);
 
             Assert.NotEqual(before, result.Email);
 
-            DumpRepo();
+            result.PrintDump();
+        }
+
+        [Fact]
+        public void SaveInsert_Invoice_Ok()
+        {
+            ClearInvoiceRepo();
+
+            var invDate = new DateTime(2016, 1, 1);
+            var inv = new Invoice
+            {
+                CustomerId = 1,
+                BillingAddress = NewAddress(),
+                InvoiceDate = invDate,
+                Total = 34.56M
+            };
+
+            var saved = _invoiceRepo.Save(inv);
+
+            Assert.IsType<Guid>(saved.Id);
+            Assert.Equal("Hidden Valley", saved.BillingAddress.City);
+            Assert.Equal(invDate, saved.InvoiceDate);
+
+
+            saved.PrintDump();
         }
 
         [Fact]
         public void One_Linq_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             _customerRepo.SaveAll(NewCustomers());
 
-            var actual = _customerRepo.One(x => x.Email.Equals("jsmith@acme.com"));
+            var actual = _customerRepo.One(x => x.Email.Equals("jdoe@acme.com"));
 
             Assert.NotNull(actual);
+            Assert.Equal(2, actual.Id);
 
+            "Selected entity: ".PrintDump();
             actual.PrintDump();
 
+            "All entities: ".PrintDump();
             DumpRepo();
         }
 
         [Fact]
         public void RemoveById_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             _customerRepo.SaveAll(NewCustomers());
 
@@ -133,7 +152,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
         [Fact]
         public void Remove_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             var cust = NewCustomer();
             _customerRepo.Save(cust);
@@ -148,7 +167,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
         [Fact]
         public void RemoveByIds_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             _customerRepo.SaveAll(NewCustomers());
 
@@ -168,7 +187,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
         [Fact]
         public void RemoveAll_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             _customerRepo.SaveAll(NewCustomers());
 
@@ -182,7 +201,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
         [Fact]
         public void All_Linq_Ok()
         {
-            ClearRepo();
+            ClearCustomerRepo();
 
             _customerRepo.SaveAll(NewCustomers());
             _customerRepo.Save(NewCustomer("James", "Harrison", "jharrison@foobar.com", "FooBar"));
@@ -207,7 +226,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
                 DapperExtensions.DapperExtensions.DefaultMapper = typeof (CustomMapper<>);
             });
 
-            ClearRepo();
+            ClearCustomerRepo();
 
             var cust = NewCustomer();
             cust.Address = NewAddress();
@@ -217,7 +236,6 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
             Assert.Equal(1, repo.Count());
             Assert.NotNull(newCust);
             
-            DumpRepo();
             newCust.PrintDump();
         }
 
@@ -236,7 +254,7 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
                 container.SatisfyImports(this);
             }
 
-            ClearRepo();
+            ClearCustomerRepo();
             _customerRepo.SaveAll(NewCustomers());
 
             var cust = NewCustomer("MEF", "Head", "mef@meffy.com", "MEFFY");
@@ -249,4 +267,3 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
         }
     }
 }
-// ReSharper enable InconsistentNaming

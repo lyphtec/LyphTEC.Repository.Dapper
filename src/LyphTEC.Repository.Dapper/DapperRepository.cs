@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Collections.Concurrent;
+using System.Reflection;
 using Dapper;
 using DapperExtensions;
 using System;
@@ -12,6 +13,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using ServiceStack.Text;
+using IClassMapper = DapperExtensions.Mapper.IClassMapper;
 
 namespace LyphTEC.Repository.Dapper
 {
@@ -63,7 +65,7 @@ namespace LyphTEC.Repository.Dapper
             // Use ISO 8601 dates -- http://stackoverflow.com/questions/11882987/why-servicestack-text-doesnt-default-dates-to-iso8601/11887560#11887560
             JsConfig.DateHandler = JsonDateHandler.ISO8601;
 
-            Helpers.ConfigureTypeHandlers();
+            DapperRepository.SetDefaultMappingAssembly();
         }
 
         private IDbConnection CreateDbConnection()
@@ -81,31 +83,15 @@ namespace LyphTEC.Repository.Dapper
             return db;
         }
 
+        /// <summary>
+        /// Default init. Will set <see cref="DefaultClassMapper{TEntity}"/> as the default mapper for DapperExtensions
+        /// </summary>
         void Init()
         {
             if (_isInitialised)
                 return;
 
-            //DapperExtensions.DapperExtensions.SetMappingAssemblies(new List<Assembly> { typeof(DapperRepository<>).Assembly });
-            DapperExtensions.DapperExtensions.DefaultMapper = typeof (CustomClassMapper<>);
-        }
-
-        /// <summary>
-        /// Specifies additional assemblies to find <see cref="IValueObject"/> to register as <see cref="SqlMapper.ITypeHandler"/> for Dapper <see cref="SqlMapper"/>
-        /// </summary>
-        /// <param name="assemblies">Assemblies to add</param>
-        /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
-        public void SetValueObjectAssemblies(params Assembly[] assemblies)
-        {
-            Helpers.AddValueObjectTypeHandlers(assemblies);
-        }
-
-        /// <summary>
-        /// Returns the collection of types that have a <see cref="SqlMapper.ITypeHandler"/> registered
-        /// </summary>
-        public IEnumerable<Type> SqlMapperTypes
-        {
-            get { return Helpers.SqlMapperTypes; }
+            DapperExtensions.DapperExtensions.DefaultMapper = typeof (DefaultClassMapper<>);
         }
 
         #region IRepository<TEntity> Members
@@ -298,5 +284,83 @@ namespace LyphTEC.Repository.Dapper
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Provides access to global static members
+    /// </summary>
+    public static class DapperRepository
+    {
+        private static readonly ConcurrentBag<Type> _sqlMapperTypes = new ConcurrentBag<Type>();
+
+        /// <summary>
+        /// Registers assemblies that contains <see cref="IValueObject"/> types as <see cref="SqlMapper.ITypeHandler"/> used by Dapper
+        /// </summary>
+        /// <param name="assemblies"></param>
+        private static void AddValueObjectTypeHandlers(params Assembly[] assemblies)
+        {
+            foreach (var assembly in assemblies)
+            {
+                // Scan assembly for all types that are IValueObject & register
+                // Assumes all these types have a default empty ctor
+                var iValueObjectType = typeof (IValueObject);
+
+                var ivoTypes = assembly
+                    .GetTypes()
+                    .Where(
+                        t =>
+                            t.IsInterface == false && t.IsAbstract == false &&
+                            t.GetInterfaces().Contains(iValueObjectType));
+
+                var handler = typeof (ValueObjectHandler<>);
+
+                foreach (var ivoType in ivoTypes.Where(ivoType => !_sqlMapperTypes.Contains(ivoType)))
+                {
+                    _sqlMapperTypes.Add(ivoType);
+
+                    var ctor = handler.MakeGenericType(new[] {ivoType}).GetConstructor(Type.EmptyTypes);
+                    var instance = (SqlMapper.ITypeHandler) ctor.Invoke(new object[] {});
+                    SqlMapper.AddTypeHandler(ivoType, instance);
+                }
+            }
+        }
+
+        internal static void SetDefaultMappingAssembly()
+        {
+            var ass = Assembly.GetEntryAssembly();
+
+            if (ass != null)
+                SetMappingAssemblies(ass);
+        }
+
+        /// <summary>
+        /// Specifies additional assemblies that contains <see cref="IValueObject"/> types to register as <see cref="SqlMapper.ITypeHandler"/> for Dapper, and/or <see cref="IClassMapper"/> mapping types for DapperExtensions
+        /// </summary>
+        /// <param name="assemblies">Assemblies to add</param>
+        /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
+        public static void SetMappingAssemblies(params Assembly[] assemblies)
+        {
+            AddValueObjectTypeHandlers(assemblies);
+
+            DapperExtensions.DapperExtensions.SetMappingAssemblies(assemblies);
+        }
+
+        /// <summary>
+        /// Returns the collection of types that have a <see cref="SqlMapper.ITypeHandler"/> registered
+        /// </summary>
+        public static IEnumerable<Type> SqlMapperTypes
+        {
+            get { return _sqlMapperTypes; }
+        }
+
+        /// <summary>
+        /// Generates a COMB Guid which solves the fragmented index issue.
+        /// See: http://davybrion.com/blog/2009/05/using-the-guidcomb-identifier-strategy
+        /// </summary>
+        /// <remarks>This is just a handy shortcut to <see cref="DapperExtensions.GetNextGuid"/></remarks>
+        public static Guid GetNextGuid()
+        {
+            return DapperExtensions.DapperExtensions.GetNextGuid();
+        }
     }
 }

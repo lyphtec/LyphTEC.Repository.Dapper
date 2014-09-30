@@ -19,6 +19,10 @@
       <dependency id="ServiceStack.Text" version="[3,4]" />
     </dependencies>
     <releaseNotes>
+      0.6.0
+        * Dapper nuget update
+        * Separate tests for SqlCe, SqlServer, &amp; SQLite
+        * DapperRepository static members supporting mapping config and utilities
       0.5.0
         * Set default options for ServiceStack JSON serializer
       0.4.0

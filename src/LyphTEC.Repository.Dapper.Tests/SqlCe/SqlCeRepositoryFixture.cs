@@ -32,12 +32,6 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
             // DapperExtensions needs to know the SqlDialect if not using the default SqlServerDialect
             DapperExtensions.DapperExtensions.SqlDialect = new SqlCeDialect();
 
-            // Load any mapping assemblies - in this case, we are loading GuidEntityMapping
-            var mappingAss = new []
-            {
-                GetType().Assembly
-            };
-            DapperExtensions.DapperExtensions.SetMappingAssemblies(mappingAss);
 
             using (var ce = new SqlCeEngine(_dbConnString))
             {
@@ -53,6 +47,14 @@ namespace LyphTEC.Repository.Dapper.Tests.SqlCe
             ExecuteScripts(files);
 
             _settings = new ConnectionStringSettings("DapperTest", _dbConnString, "System.Data.SqlServerCe.4.0");
+
+            // Load any mapping assemblies - in this case, we are loading GuidEntityMapping
+            var mappingAss = new []
+            {
+                GetType().Assembly,
+                typeof(Address).Assembly  // since our test data entities live in a referenced assembly, we need to manually add it so the IValueObject can be found and registered as a type handler
+            };
+            DapperRepository.SetMappingAssemblies(mappingAss);
         }
 
         public ConnectionStringSettings Settings
