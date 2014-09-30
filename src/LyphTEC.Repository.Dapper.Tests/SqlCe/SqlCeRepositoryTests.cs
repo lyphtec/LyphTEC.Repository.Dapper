@@ -1,34 +1,37 @@
-﻿using Dapper;
+﻿using System;
+using System.Composition;
+using System.Composition.Hosting;
+using System.Linq;
+using Dapper;
 using LyphTEC.Repository.Dapper.Tests.Extensions;
 using LyphTEC.Repository.Dapper.Tests.Model;
 using LyphTEC.Repository.Tests;
 using LyphTEC.Repository.Tests.Domain;
 using ServiceStack.Text;
-using System;
-using System.Composition;
-using System.Composition.Hosting;
-using System.Linq;
 using Xunit;
 
 // ReSharper disable InconsistentNaming
-namespace LyphTEC.Repository.Dapper.Tests
+namespace LyphTEC.Repository.Dapper.Tests.SqlCe
 {
-    public class DapperRepositoryTests : CommonRepositoryTest, IUseFixture<DapperRepositoryFixture>
+    public class SqlCeRepositoryTests : CommonRepositoryTest, IUseFixture<SqlCeRepositoryFixture>
     {
-        private DapperRepositoryFixture _fixture;
-        private DapperRepository<Customer> _repo;
+        private SqlCeRepositoryFixture _fixture;
+        private DapperRepository<Customer> _customerRepo;
+        private DapperRepository<GuidEntity> _geRepo;
         
         #region IUseFixture<CommonRepositoryFixture> Members
 
-        public void SetFixture(DapperRepositoryFixture data)
+        public void SetFixture(SqlCeRepositoryFixture data)
         {
             _fixture = data;
-            _repo = new DapperRepository<Customer>(data.Settings);
+            _customerRepo = new DapperRepository<Customer>(data.Settings);
+            _geRepo = new DapperRepository<GuidEntity>(data.Settings);
 
             // since our test data entities live in a referenced assembly, we need to manually add it so the IValueObject can be found and registered as a type handler
-            _repo.SetValueObjectAssemblies(typeof(Address).Assembly);
+            _customerRepo.SetValueObjectAssemblies(typeof(Address).Assembly);
+            _geRepo.SetValueObjectAssemblies(typeof(Address).Assembly);
 
-            CustomerRepo = _repo;
+            CustomerRepo = _customerRepo;
         }
 
         #endregion
@@ -38,6 +41,7 @@ namespace LyphTEC.Repository.Dapper.Tests
             using (var db = _fixture.GetDbConnection())
             {
                 db.Execute("delete from Customer");
+                db.Execute("delete from GuidEntity");
             }
         }
 
@@ -49,10 +53,11 @@ namespace LyphTEC.Repository.Dapper.Tests
 
             var cust = NewCustomer();
             cust.Address = NewAddress();
+            cust.Address.DateAdded = new DateTime(2016, 1, 1);
 
-            var newCust = _repo.Save(cust);
+            var newCust = _customerRepo.Save(cust);
 
-            Assert.Equal(1, _repo.Count());
+            Assert.Equal(1, _customerRepo.Count());
             Assert.NotNull(newCust);
             Assert.Equal("Hidden Valley", newCust.Address.City);
             
@@ -61,17 +66,32 @@ namespace LyphTEC.Repository.Dapper.Tests
         }
 
         [Fact]
+        public void Save_GuidEntity_Ok()
+        {
+            var entity = _fixture.NewGuidEntity();
+            entity.Address= NewAddress(city: "Mod City");
+
+            var result = _geRepo.Save(entity);
+
+            Assert.NotNull(result.Id);
+            Assert.IsType<Guid>(result.Id);
+            Assert.Equal("Mod City", result.Address.City);
+            
+            result.PrintDump();
+        }
+
+        [Fact]
         public void Save_Update_Ok()
         {
             ClearRepo();
 
-            var cust = _repo.Save(NewCustomer());
+            var cust = _customerRepo.Save(NewCustomer());
 
             var before = cust.Email;
 
             cust.Email = "updated@me.com";
             
-            var result = _repo.Save(cust);
+            var result = _customerRepo.Save(cust);
 
             Assert.NotEqual(before, result.Email);
 
@@ -83,9 +103,9 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             ClearRepo();
 
-            _repo.SaveAll(NewCustomers());
+            _customerRepo.SaveAll(NewCustomers());
 
-            var actual = _repo.One(x => x.Email.Equals("jsmith@acme.com"));
+            var actual = _customerRepo.One(x => x.Email.Equals("jsmith@acme.com"));
 
             Assert.NotNull(actual);
 
@@ -99,16 +119,16 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             ClearRepo();
 
-            _repo.SaveAll(NewCustomers());
+            _customerRepo.SaveAll(NewCustomers());
 
-            var one = _repo.One(x => x.Email.Equals("jsmith@acme.com"));
+            var one = _customerRepo.One(x => x.Email.Equals("jsmith@acme.com"));
 
             Console.WriteLine("Removing Id: {0}", one.Id);
-            _repo.Remove(one.Id);
+            _customerRepo.Remove(one.Id);
 
-            Assert.Equal(2, _repo.Count());
+            Assert.Equal(2, _customerRepo.Count());
 
-            var cust = _repo.One(one.Id);
+            var cust = _customerRepo.One(one.Id);
             Assert.Null(cust);
 
             DumpRepo();
@@ -120,13 +140,13 @@ namespace LyphTEC.Repository.Dapper.Tests
             ClearRepo();
 
             var cust = NewCustomer();
-            _repo.Save(cust);
+            _customerRepo.Save(cust);
 
-            Assert.Equal(1, _repo.Count());
+            Assert.Equal(1, _customerRepo.Count());
 
-            _repo.Remove(cust);
+            _customerRepo.Remove(cust);
 
-            Assert.Equal(0, _repo.Count());
+            Assert.Equal(0, _customerRepo.Count());
         }
 
         [Fact]
@@ -134,17 +154,17 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             ClearRepo();
 
-            _repo.SaveAll(NewCustomers());
+            _customerRepo.SaveAll(NewCustomers());
 
-            var ids = _repo.All().Take(2).Select(x => x.Id).ToList();
+            var ids = _customerRepo.All().Take(2).Select(x => x.Id).ToList();
 
             Console.WriteLine("Removing Ids: ");
 
             ids.PrintDump();
 
-            _repo.RemoveByIds(ids);
+            _customerRepo.RemoveByIds(ids);
 
-            Assert.Equal(1, _repo.Count());
+            Assert.Equal(1, _customerRepo.Count());
 
             DumpRepo();
         }
@@ -154,13 +174,13 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             ClearRepo();
 
-            _repo.SaveAll(NewCustomers());
+            _customerRepo.SaveAll(NewCustomers());
 
-            Assert.Equal(3, _repo.Count());
+            Assert.Equal(3, _customerRepo.Count());
             
-            _repo.RemoveAll();
+            _customerRepo.RemoveAll();
 
-            Assert.Equal(0, _repo.Count());
+            Assert.Equal(0, _customerRepo.Count());
         }
 
         [Fact]
@@ -168,14 +188,14 @@ namespace LyphTEC.Repository.Dapper.Tests
         {
             ClearRepo();
 
-            _repo.SaveAll(NewCustomers());
-            _repo.Save(NewCustomer("James", "Harrison", "jharrison@foobar.com", "FooBar"));
+            _customerRepo.SaveAll(NewCustomers());
+            _customerRepo.Save(NewCustomer("James", "Harrison", "jharrison@foobar.com", "FooBar"));
 
-            Assert.Equal(4, _repo.Count());
+            Assert.Equal(4, _customerRepo.Count());
 
             DumpRepo();
 
-            var actual = _repo.All(x => x.Company.Equals("ACME"));
+            var actual = _customerRepo.All(x => x.Company.Equals("ACME"));
 
             Assert.Equal(3, actual.Count());
 
@@ -221,13 +241,13 @@ namespace LyphTEC.Repository.Dapper.Tests
             }
 
             ClearRepo();
-            _repo.SaveAll(NewCustomers());
+            _customerRepo.SaveAll(NewCustomers());
 
             var cust = NewCustomer("MEF", "Head", "mef@meffy.com", "MEFFY");
 
             MefCustomerRepo.Save(cust);
 
-            Assert.Equal(4, _repo.Count());
+            Assert.Equal(4, _customerRepo.Count());
 
             DumpRepo();
         }

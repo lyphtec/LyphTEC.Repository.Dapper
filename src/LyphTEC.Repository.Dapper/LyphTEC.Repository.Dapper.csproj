@@ -105,9 +105,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\DapperExtensions.1.4.5\lib\net40\DapperExtensions.dll</HintPath>
     </Reference>
-    <Reference Include="LyphTEC.Repository, Version=0.7.4.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="LyphTEC.Repository, Version=0.7.5.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\LyphTEC.Repository.0.7.4\lib\net45\LyphTEC.Repository.dll</HintPath>
+      <HintPath>..\packages\LyphTEC.Repository.0.7.5\lib\net45\LyphTEC.Repository.dll</HintPath>
     </Reference>
     <Reference Include="ServiceStack.Text">
       <HintPath>..\packages\ServiceStack.Text.3.9.71\lib\net35\ServiceStack.Text.dll</HintPath>
@@ -148,15 +148,15 @@
     </Compile>
     <Compile Include="CustomClassMapper.cs" />
     <Compile Include="Expressions\DapperExpressionVisitor.cs" />
-    <Compile Include="DapperHelpers.cs" />
+    <Compile Include="Helpers.cs" />
     <Compile Include="DapperRepository.cs" />
     <Compile Include="Expressions\Evaluator.cs" />
     <Compile Include="IdTypeHandler.cs">
-      <DependentUpon>DapperHelpers.cs</DependentUpon>
+      <DependentUpon>Helpers.cs</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ValueObjectHandler.cs">
-      <DependentUpon>DapperHelpers.cs</DependentUpon>
+      <DependentUpon>Helpers.cs</DependentUpon>
     </Compile>
   </ItemGroup>
   <ItemGroup>

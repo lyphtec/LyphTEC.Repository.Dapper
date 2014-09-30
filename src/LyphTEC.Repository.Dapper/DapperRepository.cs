@@ -11,6 +11,7 @@ using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+using ServiceStack.Text;
 
 namespace LyphTEC.Repository.Dapper
 {
@@ -56,7 +57,13 @@ namespace LyphTEC.Repository.Dapper
 
         static DapperRepository()
         {
-            DapperHelpers.ConfigureTypeHandlers();
+            // Set default options for ServiceStack JSON serializer
+            JsConfig.EmitCamelCaseNames = true;
+
+            // Use ISO 8601 dates -- http://stackoverflow.com/questions/11882987/why-servicestack-text-doesnt-default-dates-to-iso8601/11887560#11887560
+            JsConfig.DateHandler = JsonDateHandler.ISO8601;
+
+            Helpers.ConfigureTypeHandlers();
         }
 
         private IDbConnection CreateDbConnection()
@@ -90,7 +97,15 @@ namespace LyphTEC.Repository.Dapper
         /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
         public void SetValueObjectAssemblies(params Assembly[] assemblies)
         {
-            DapperHelpers.AddValueObjectTypeHandlers(assemblies);
+            Helpers.AddValueObjectTypeHandlers(assemblies);
+        }
+
+        /// <summary>
+        /// Returns the collection of types that have a <see cref="SqlMapper.ITypeHandler"/> registered
+        /// </summary>
+        public IEnumerable<Type> SqlMapperTypes
+        {
+            get { return Helpers.SqlMapperTypes; }
         }
 
         #region IRepository<TEntity> Members

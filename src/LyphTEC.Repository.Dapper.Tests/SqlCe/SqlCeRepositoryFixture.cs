@@ -1,20 +1,23 @@
-﻿using Dapper;
-using DapperExtensions.Sql;
-using ServiceStack.Text;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlServerCe;
 using System.IO;
+using System.Reflection;
+using Dapper;
+using DapperExtensions.Sql;
+using LyphTEC.Repository.Tests.Domain;
+using ServiceStack.Text;
 
-namespace LyphTEC.Repository.Dapper.Tests
+namespace LyphTEC.Repository.Dapper.Tests.SqlCe
 {
-    public class DapperRepositoryFixture
+    public class SqlCeRepositoryFixture
     {
         private readonly string _dbConnString;
         private readonly ConnectionStringSettings _settings;
 
-        public DapperRepositoryFixture()
+        public SqlCeRepositoryFixture()
         {
             AssemblyUtils.SetEntryAssembly();
 
@@ -29,12 +32,25 @@ namespace LyphTEC.Repository.Dapper.Tests
             // DapperExtensions needs to know the SqlDialect if not using the default SqlServerDialect
             DapperExtensions.DapperExtensions.SqlDialect = new SqlCeDialect();
 
+            // Load any mapping assemblies - in this case, we are loading GuidEntityMapping
+            var mappingAss = new []
+            {
+                GetType().Assembly
+            };
+            DapperExtensions.DapperExtensions.SetMappingAssemblies(mappingAss);
+
             using (var ce = new SqlCeEngine(_dbConnString))
             {
                 ce.CreateDatabase();
             }
 
-            ExecuteScript("CreateCustomerTable");
+            var files = new []
+            {
+                "CreateCustomerTable",
+                "CreateGuidEntityTable"
+            };
+
+            ExecuteScripts(files);
 
             _settings = new ConnectionStringSettings("DapperTest", _dbConnString, "System.Data.SqlServerCe.4.0");
         }
@@ -51,28 +67,19 @@ namespace LyphTEC.Repository.Dapper.Tests
             return db;
         }
 
-        int ExecuteScript(string scriptName)
+        void ExecuteScripts(params string[] scriptNames)
         {
             var db = GetDbConnection();
 
             if (db.State != ConnectionState.Open)
                 db.Open();
 
-            var result = db.Execute(ReadScriptFile(scriptName));
+            foreach (var scriptName in scriptNames)
+            {
+                db.Execute(Utils.ReadScriptFile(GetType(), scriptName));
+            }
 
             db.Close();
-
-            return result;
-        }
-
-        private string ReadScriptFile(string name)
-        {
-            var fileName = GetType().Namespace + ".Sql." + name + ".sql";
-            using (var s = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(fileName))
-            using (var sr = new StreamReader(s))
-            {
-                return sr.ReadToEnd();
-            }
         }
 
         private static void Cleanup()
@@ -90,6 +97,15 @@ namespace LyphTEC.Repository.Dapper.Tests
             {
                 ex.PrintDump();
             }
+        }
+
+        public GuidEntity NewGuidEntity(string name = "Bob Snob")
+        {
+            return new GuidEntity
+            {
+                Name = name,
+                DateField = new DateTime(2017, 1, 1)
+            };
         }
     }
 }
