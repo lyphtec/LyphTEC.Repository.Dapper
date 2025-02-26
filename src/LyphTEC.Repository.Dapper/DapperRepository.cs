@@ -1,366 +1,382 @@
-﻿using System.Collections.Concurrent;
-using System.Reflection;
-using Dapper;
-using DapperExtensions;
-using System;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Composition;
 using System.Configuration;
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Threading.Tasks;
-using ServiceStack.Text;
+using Dapper;
+using DapperExtensions;
+using DapperExtensions.Predicate;
 using IClassMapper = DapperExtensions.Mapper.IClassMapper;
 
-namespace LyphTEC.Repository.Dapper
+namespace LyphTEC.Repository.Dapper;
+
+// Some resources that may be useful: 
+//  - http://stackoverflow.com/questions/15154783/pulling-apart-expressionfunct-object
+//  - http://stackoverflow.com/questions/16083895/grouping-lambda-expressions-by-operators-and-using-them-with-dapperextensions-p
+//  - http://blogs.msdn.com/b/mattwar/archive/2007/07/31/linq-building-an-iqueryable-provider-part-ii.aspx
+//  - http://msdn.microsoft.com/en-us/library/bb546136(v=vs.110).aspx
+//  - http://stackoverflow.com/questions/14437239/change-a-linq-expression-predicate-from-one-type-to-another/14439071#14439071
+
+/// <summary>
+/// <see cref="IRepository{TEntity}"/> implementation using Dapper as the persistence logic layer
+/// </summary>
+/// <typeparam name="TEntity"></typeparam>
+[Export(typeof(IRepository<>))]
+[Shared]
+public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : class, IEntity
 {
-    // Some resources that may be useful: 
-    //  - http://stackoverflow.com/questions/15154783/pulling-apart-expressionfunct-object
-    //  - http://stackoverflow.com/questions/16083895/grouping-lambda-expressions-by-operators-and-using-them-with-dapperextensions-p
-    //  - http://blogs.msdn.com/b/mattwar/archive/2007/07/31/linq-building-an-iqueryable-provider-part-ii.aspx
-    //  - http://msdn.microsoft.com/en-us/library/bb546136(v=vs.110).aspx
-    //  - http://stackoverflow.com/questions/14437239/change-a-linq-expression-predicate-from-one-type-to-another/14439071#14439071
+    private readonly DbProviderFactory _factory;
+    private readonly string _dbConnectionString;
+    private readonly bool _isInitialized;
 
     /// <summary>
-    /// <see cref="IRepository{TEntity}"/> implementation using Dapper as the persistence logic layer
+    /// Instantiates a new instance of <see cref="DapperRepository{TEntity}"/>
     /// </summary>
-    /// <typeparam name="TEntity"></typeparam>
-    [Export(typeof(IRepository<>))]
-    [Shared]
-    public class DapperRepository<TEntity> : IRepository<TEntity>, IRepositoryAsync<TEntity> where TEntity : class, IEntity
+    /// <param name="settings">Connection settings</param>
+    /// <param name="customInit">Provide your own initialisation instead of using the default <see cref="Init"/></param>
+    [ImportingConstructor]
+    public DapperRepository([Import]ConnectionStringSettings settings, [Import("CustomInit", AllowDefault = true)]Action customInit = null)
     {
-        private readonly DbProviderFactory _factory;
-        private readonly string _dbConnectionString;
-        private readonly bool _isInitialised;
+        Contract.Requires<ArgumentNullException>(settings != null && !string.IsNullOrWhiteSpace(settings.ProviderName) && !string.IsNullOrWhiteSpace(settings.ConnectionString), $"{nameof(ConnectionStringSettings)} required");
 
-        /// <summary>
-        /// Instantiates a new instance of <see cref="DapperRepository{TEntity}"/>
-        /// </summary>
-        /// <param name="settings">Connection settings</param>
-        /// <param name="customInit">Provide your own initialisation instead of using the default <see cref="Init"/></param>
-        [ImportingConstructor]
-        public DapperRepository([Import]ConnectionStringSettings settings, [Import("CustomInit", AllowDefault = true)]Action customInit = null)
-        {
-            Contract.Requires<ArgumentNullException>(settings != null && !string.IsNullOrWhiteSpace(settings.ProviderName) && !string.IsNullOrWhiteSpace(settings.ConnectionString));
+        _factory = DbProviderFactories.GetFactory(settings.ProviderName);
+        _dbConnectionString = settings.ConnectionString;
+        
+        if (customInit == null)
+            Init();
+        else
+            customInit();
 
-            _factory = DbProviderFactories.GetFactory(settings.ProviderName);
-            _dbConnectionString = settings.ConnectionString;
-            
-            if (customInit == null)
-                Init();
-            else
-                customInit();
+        _isInitialized = true;
+    }
 
-            _isInitialised = true;
-        }
+    static DapperRepository()
+    {
+        DapperRepository.SetDefaultMappingAssembly();
+    }
 
-        static DapperRepository()
-        {
-            // Set default options for ServiceStack JSON serializer
-            JsConfig.EmitCamelCaseNames = true;
+    private IDbConnection CreateDbConnection()
+    {
+        var db = _factory.CreateConnection() ?? throw new Exception("Unable to create a new DbConnection");
+        db.ConnectionString = _dbConnectionString;
 
-            // Use ISO 8601 dates -- http://stackoverflow.com/questions/11882987/why-servicestack-text-doesnt-default-dates-to-iso8601/11887560#11887560
-            JsConfig.DateHandler = JsonDateHandler.ISO8601;
+        if (db.State != ConnectionState.Open)
+            db.Open();
 
-            DapperRepository.SetDefaultMappingAssembly();
-        }
-
-        private IDbConnection CreateDbConnection()
-        {
-            var db = _factory.CreateConnection();
-
-            if (db == null)
-                throw new Exception("Unable to create a new DbConnection");
-
-            db.ConnectionString = _dbConnectionString;
-
-            if (db.State != ConnectionState.Open)
-                db.Open();
-
-            return db;
-        }
-
-        /// <summary>
-        /// Default init. Will set <see cref="DefaultClassMapper{TEntity}"/> as the default mapper for DapperExtensions
-        /// </summary>
-        void Init()
-        {
-            if (_isInitialised)
-                return;
-
-            DapperExtensions.DapperExtensions.DefaultMapper = typeof (DefaultClassMapper<>);
-        }
-
-        #region IRepository<TEntity> Members
-
-        public IQueryable<TEntity> All(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            var db = CreateDbConnection();
-            
-            var results = (predicate == null) ? db.GetList<TEntity>() : db.GetList<TEntity>(predicate.ToPredicateGroup());
-
-            db.Close();
-            db.Dispose();
-            
-            return results.AsQueryable();
-        }
-
-        public bool Any(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            return Count(predicate) > 0;
-        }
-
-        public int Count(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            var db = CreateDbConnection();
-
-            var predicates = predicate.ToPredicateGroup();
-            var result = db.Count<TEntity>(predicates);
-
-            db.Close();
-            db.Dispose();
-
-            return result;
-        }
-
-        public TEntity One(Expression<Func<TEntity, bool>> predicate)
-        {
-            var db = CreateDbConnection();
-
-            var result = All(predicate).SingleOrDefault();
-
-            db.Close();
-            db.Dispose();
-
-            return result;
-        }
-
-        public TEntity One(object id)
-        {
-            var db = CreateDbConnection();
-
-            var result = db.Get<TEntity>(id);
-
-            db.Close();
-            db.Dispose();
-
-            return result;
-        }
-
-        public void Remove(object id)
-        {
-            var record = One(id);
-
-            if (record == null) return;
-
-            using (var db = CreateDbConnection())
-            {
-                db.Delete(record);
-
-                db.Close();
-            }
-        }
-
-        public void Remove(TEntity entity)
-        {
-            Remove(entity.Id);
-        }
-
-        public void RemoveAll()
-        {
-            using (var db = CreateDbConnection())
-            {
-                var t = typeof(TEntity);
-
-                // TODO: This assumes that our table has the same name as TEntity
-                db.Execute(string.Format("delete from {0}", t.Name));
-
-                db.Close();
-            }
-        }
-
-        public void RemoveByIds(System.Collections.IEnumerable ids)
-        {
-            if (ids == null)
-                return;
-
-            var predicate = Predicates.Field<TEntity>(x => x.Id, Operator.Eq, ids);
-
-            using (var db = CreateDbConnection())
-            {
-                var success = db.Delete<TEntity>(predicate);
-
-                db.Close();
-            }
-        }
-
-        public TEntity Save(TEntity entity)
-        {
-            using (var db = CreateDbConnection())
-            {
-                // Insert
-                if (entity.Id == null)
-                    db.Insert(entity);
-                else
-                    db.Update(entity);
-
-                db.Close();
-                db.Dispose();
-            }
-
-            return entity;
-        }
-
-        public void SaveAll(IEnumerable<TEntity> entities)
-        {
-            // TODO: Consider using bulk insert : https://github.com/tmsmith/Dapper-Extensions/issues/18
-            foreach (var entity in entities)
-            {
-                Save(entity);
-            }
-        }
-
-        #endregion
-
-
-        #region IRepositoryAsync<> Members
-
-        public Task<IQueryable<TEntity>> AllAsync(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<int> CountAsync(Expression<Func<TEntity, bool>> predicate = null)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<TEntity> OneAsync(Expression<Func<TEntity, bool>> predicate)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<TEntity> OneAsync(object id)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> RemoveAllAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> RemoveAsync(object id)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> RemoveAsync(TEntity entity)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> RemoveByIdsAsync(System.Collections.IEnumerable ids)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<bool> SaveAllAsync(IEnumerable<TEntity> entities)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<TEntity> SaveAsync(TEntity entity)
-        {
-            throw new NotImplementedException();
-        }
-
-        #endregion
+        return db;
     }
 
     /// <summary>
-    /// Provides access to global static members
+    /// Default init. Will set <see cref="DefaultClassMapper{TEntity}"/> as the default mapper for DapperExtensions
     /// </summary>
-    public static class DapperRepository
+    void Init()
     {
-        private static readonly ConcurrentBag<Type> _sqlMapperTypes = new ConcurrentBag<Type>();
+        if (_isInitialized)
+            return;
 
-        /// <summary>
-        /// Registers assemblies that contains <see cref="IValueObject"/> types as <see cref="SqlMapper.ITypeHandler"/> used by Dapper
-        /// </summary>
-        /// <param name="assemblies"></param>
-        private static void AddValueObjectTypeHandlers(params Assembly[] assemblies)
+        DapperExtensions.DapperExtensions.DefaultMapper = typeof (DefaultClassMapper<>);
+    }
+
+    #region IRepository<TEntity> Members
+
+    public IEnumerable<TEntity> Query(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        using var db = CreateDbConnection();
+        
+        var results = (predicate == null) ? db.GetList<TEntity>() : db.GetList<TEntity>(predicate.ToPredicateGroup());
+        
+        return results.AsQueryable();
+    }
+
+    public bool Any(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        return Count(predicate) > 0;
+    }
+
+    public int Count(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        using var db = CreateDbConnection();
+
+        var predicates = predicate.ToPredicateGroup();
+        var result = db.Count<TEntity>(predicates);
+
+        return result;
+    }
+
+    public TEntity Get(Expression<Func<TEntity, bool>> predicate)
+    {
+        using var db = CreateDbConnection();
+
+        var result = Query(predicate).FirstOrDefault();
+
+        return result;
+    }
+
+    public TEntity Get(object id)
+    {
+        using var db = CreateDbConnection();
+
+        // https://github.com/tmsmith/Dapper-Extensions/issues/315
+        var result = db.Get<TEntity>(id);
+
+        return result;
+    }
+
+    public void Remove(object id)
+    {
+        var record = Get(id);
+        if (record == null) return;
+
+        using var db = CreateDbConnection();
+        db.Delete(record);
+    }
+
+    public void Remove(TEntity entity)
+    {
+        Remove(entity.Id);
+    }
+
+    public void RemoveAll()
+    {
+        using var db = CreateDbConnection();
+        var t = typeof(TEntity);
+
+        // TODO: This assumes that our table has the same name as TEntity
+        db.Execute(string.Format("delete from {0}", t.Name));
+    }
+
+    public void RemoveByIds(System.Collections.IEnumerable ids)
+    {
+        if (ids == null)
+            return;
+
+        var predicate = Predicates.Field<TEntity>(x => x.Id, Operator.Eq, ids);
+
+        using var db = CreateDbConnection();
+        db.Delete<TEntity>(predicate);
+    }
+
+    public TEntity Save(TEntity entity)
+    {
+        using var db = CreateDbConnection();
+
+        // Insert
+        if (entity.Id == null)
+            db.Insert(entity);
+        else
+            db.Update(entity);
+
+        return entity;
+    }
+
+    public void Save(IEnumerable<TEntity> entities)
+    {
+        // TODO: Consider using bulk insert : https://github.com/tmsmith/Dapper-Extensions/issues/18
+        using var db = CreateDbConnection();
+
+        // updates
+        foreach (var entity in entities.Where(x => x.Id != null))
         {
-            foreach (var assembly in assemblies)
+            db.Update(entity);
+        }
+
+        // inserts
+        var toInsert = entities.Where(x => x.Id == null);
+        if (toInsert.Any())
+            db.Insert(toInsert);
+    }
+
+    #endregion
+
+
+    #region IRepositoryAsync<> Members
+
+    public async Task<IEnumerable<TEntity>> QueryAsync(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        using var db = CreateDbConnection();
+        
+        var results = (predicate is null)
+                            ? await db.GetListAsync<TEntity>()
+                            : await db.GetListAsync<TEntity>(predicate.ToPredicateGroup());
+        
+        return results.AsQueryable();
+    }
+
+    public async Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        return await CountAsync(predicate) > 0;
+    }
+
+    public async Task<int> CountAsync(Expression<Func<TEntity, bool>> predicate = null)
+    {
+        using var db = CreateDbConnection();
+
+        var predicates = predicate.ToPredicateGroup();
+        var result = await db.CountAsync<TEntity>(predicates);
+
+        return result;
+    }
+
+    public async Task<TEntity> GetAsync(Expression<Func<TEntity, bool>> predicate)
+    {
+        return (await QueryAsync(predicate)).FirstOrDefault();
+    }
+
+    public async Task<TEntity> GetAsync(object id)
+    {
+        using var db = CreateDbConnection();
+        var result = await db.GetAsync<TEntity>(id);
+        return result;
+    }
+
+    public async Task<bool> RemoveAllAsync()
+    {
+        using var db = CreateDbConnection();
+        var t = typeof(TEntity);
+
+        // TODO: This assumes that our table has the same name as TEntity
+        await db.ExecuteAsync(string.Format("delete from {0}", t.Name));
+
+        return true;
+    }
+
+    public async Task<bool> RemoveAsync(object id)
+    {
+        var record = await GetAsync(id);
+        if (record == null) return false;
+        using var db = CreateDbConnection();
+        return await db.DeleteAsync(record);
+    }
+
+    public Task<bool> RemoveAsync(TEntity entity)
+    {
+        return RemoveAsync(entity.Id);
+    }
+
+    public async Task<bool> RemoveByIdsAsync(System.Collections.IEnumerable ids)
+    {
+        if (ids == null)
+            return false;
+
+        var predicate = Predicates.Field<TEntity>(x => x.Id, Operator.Eq, ids);
+
+        using var db = CreateDbConnection();
+        return await db.DeleteAsync<TEntity>(predicate);
+    }
+
+    public async Task<bool> SaveAsync(IEnumerable<TEntity> entities)
+    {
+        using var db = CreateDbConnection();
+
+        // updates
+        foreach (var entity in entities.Where(x => x.Id != null))
+        {
+            await db.UpdateAsync(entity);
+        }
+
+        // inserts
+        var toInsert = entities.Where(x => x.Id == null);
+        if (toInsert.Any())
+            await db.InsertAsync(toInsert);
+
+        return true;
+    }
+
+    public async Task<TEntity> SaveAsync(TEntity entity)
+    {
+        using var db = CreateDbConnection();
+
+        if (entity.Id == null)
+            await db.InsertAsync(entity);
+        else
+            await db.UpdateAsync(entity);
+
+        return entity;
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// Provides access to global static members
+/// </summary>
+public static class DapperRepository
+{
+    private static readonly ConcurrentBag<Type> _sqlMapperTypes = [];
+
+    /// <summary>
+    /// Registers assemblies that contains <see cref="IValueObject"/> types as <see cref="SqlMapper.ITypeHandler"/> used by Dapper
+    /// </summary>
+    /// <param name="assemblies"></param>
+    private static void AddValueObjectTypeHandlers(params Assembly[] assemblies)
+    {
+        foreach (var assembly in assemblies)
+        {
+            // Scan assembly for all types that are IValueObject & register
+            // Assumes all these types have a default empty ctor
+            var iValueObjectType = typeof (IValueObject);
+
+            var ivoTypes = assembly
+                .GetTypes()
+                .Where(
+                    t =>
+                        t.IsInterface == false && t.IsAbstract == false &&
+                        t.GetInterfaces().Contains(iValueObjectType));
+
+            var handler = typeof (ValueObjectHandler<>);
+
+            foreach (var ivoType in ivoTypes.Where(ivoType => !_sqlMapperTypes.Contains(ivoType)))
             {
-                // Scan assembly for all types that are IValueObject & register
-                // Assumes all these types have a default empty ctor
-                var iValueObjectType = typeof (IValueObject);
+                _sqlMapperTypes.Add(ivoType);
 
-                var ivoTypes = assembly
-                    .GetTypes()
-                    .Where(
-                        t =>
-                            t.IsInterface == false && t.IsAbstract == false &&
-                            t.GetInterfaces().Contains(iValueObjectType));
-
-                var handler = typeof (ValueObjectHandler<>);
-
-                foreach (var ivoType in ivoTypes.Where(ivoType => !_sqlMapperTypes.Contains(ivoType)))
-                {
-                    _sqlMapperTypes.Add(ivoType);
-
-                    var ctor = handler.MakeGenericType(new[] {ivoType}).GetConstructor(Type.EmptyTypes);
-                    var instance = (SqlMapper.ITypeHandler) ctor.Invoke(new object[] {});
-                    SqlMapper.AddTypeHandler(ivoType, instance);
-                }
+                var ctor = handler.MakeGenericType(ivoType).GetConstructor(Type.EmptyTypes);
+                var instance = (SqlMapper.ITypeHandler) ctor.Invoke([]);
+                SqlMapper.AddTypeHandler(ivoType, instance);
             }
         }
+    }
 
-        internal static void SetDefaultMappingAssembly()
-        {
-            var ass = Assembly.GetEntryAssembly();
+    internal static void SetDefaultMappingAssembly()
+    {
+        var ass = Assembly.GetEntryAssembly();
 
-            if (ass != null)
-                SetMappingAssemblies(ass);
-        }
+        if (ass != null)
+            SetMappingAssemblies(ass);
+    }
 
-        /// <summary>
-        /// Specifies additional assemblies that contains <see cref="IValueObject"/> types to register as <see cref="SqlMapper.ITypeHandler"/> for Dapper, and/or <see cref="IClassMapper"/> mapping types for DapperExtensions
-        /// </summary>
-        /// <param name="assemblies">Assemblies to add</param>
-        /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
-        public static void SetMappingAssemblies(params Assembly[] assemblies)
-        {
-            AddValueObjectTypeHandlers(assemblies);
+    /// <summary>
+    /// Specifies additional assemblies that contains <see cref="IValueObject"/> types to register as <see cref="SqlMapper.ITypeHandler"/> for Dapper, and/or <see cref="IClassMapper"/> mapping types for DapperExtensions
+    /// </summary>
+    /// <param name="assemblies">Assemblies to add</param>
+    /// <remarks>By default, <see cref="Assembly.GetEntryAssembly"/> is already added when class is instantiated</remarks>
+    public static void SetMappingAssemblies(params Assembly[] assemblies)
+    {
+        AddValueObjectTypeHandlers(assemblies);
 
-            DapperExtensions.DapperExtensions.SetMappingAssemblies(assemblies);
-        }
+        DapperExtensions.DapperExtensions.SetMappingAssemblies(assemblies);
+    }
 
-        /// <summary>
-        /// Returns the collection of types that have a <see cref="SqlMapper.ITypeHandler"/> registered
-        /// </summary>
-        public static IEnumerable<Type> SqlMapperTypes
-        {
-            get { return _sqlMapperTypes; }
-        }
+    /// <summary>
+    /// Returns the collection of types that have a <see cref="SqlMapper.ITypeHandler"/> registered
+    /// </summary>
+    public static IEnumerable<Type> SqlMapperTypes
+    {
+        get { return _sqlMapperTypes; }
+    }
 
-        /// <summary>
-        /// Generates a COMB Guid which solves the fragmented index issue.
-        /// See: http://davybrion.com/blog/2009/05/using-the-guidcomb-identifier-strategy
-        /// </summary>
-        /// <remarks>This is just a handy shortcut to <see cref="DapperExtensions.GetNextGuid"/></remarks>
-        public static Guid GetNextGuid()
-        {
-            return DapperExtensions.DapperExtensions.GetNextGuid();
-        }
+    /// <summary>
+    /// Generates a COMB Guid which solves the fragmented index issue.
+    /// See: http://davybrion.com/blog/2009/05/using-the-guidcomb-identifier-strategy
+    /// </summary>
+    /// <remarks>This is just a handy shortcut to <see cref="DapperExtensions.GetNextGuid"/></remarks>
+    public static Guid GetNextGuid()
+    {
+        return DapperExtensions.DapperExtensions.GetNextGuid();
     }
 }

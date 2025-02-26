@@ -1,15 +1,13 @@
 ﻿using DapperExtensions.Mapper;
-using LyphTEC.Repository.Tests.Domain;
+using LyphTEC.Repository.Dapper.Tests.Domain;
 
-namespace LyphTEC.Repository.Dapper.Tests.SqlServer
+namespace LyphTEC.Repository.Dapper.Tests.SqlServer;
+
+public class InvoiceMapper : ClassMapper<Invoice>
 {
-    public class InvoiceMapper : ClassMapper<Invoice>
+    public InvoiceMapper()
     {
-        public InvoiceMapper()
-        {
-            Table("Invoice");
-            Map(x => x.Id).Key(KeyType.Guid);
-            AutoMap();
-        }
+        Map(x => x.Id).Key(KeyType.Guid);
+        AutoMap();
     }
 }

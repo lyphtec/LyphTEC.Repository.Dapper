@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LyphTEC.Repository.Dapper.Tests
 {
@@ -27,6 +23,7 @@ namespace LyphTEC.Repository.Dapper.Tests
         /// <param name="assembly">Assembly to set as entry assembly</param>
         public static void SetEntryAssembly(Assembly assembly)
         {
+            /*
             var manager = new AppDomainManager();
             var entryAssemblyfield = manager.GetType().GetField("m_entryAssembly", BindingFlags.Instance | BindingFlags.NonPublic);
             entryAssemblyfield.SetValue(manager, assembly);
@@ -34,6 +31,7 @@ namespace LyphTEC.Repository.Dapper.Tests
             var domain = AppDomain.CurrentDomain;
             var domainManagerField = domain.GetType().GetField("_domainManager", BindingFlags.Instance | BindingFlags.NonPublic);
             domainManagerField.SetValue(domain, manager);
+            */
         }
 
     }

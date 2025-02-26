@@ -1,97 +1,91 @@
 ﻿using System;
 using System.Configuration;
 using System.Data;
+using System.Data.Common;
 using System.Data.SQLite;
 using System.IO;
 using Dapper;
 using DapperExtensions.Sql;
-using LyphTEC.Repository.Tests.Domain;
-using ServiceStack.Text;
+using LyphTEC.Repository.Dapper.Tests.Domain;
 
-namespace LyphTEC.Repository.Dapper.Tests.SQLite
+namespace LyphTEC.Repository.Dapper.Tests.SQLite;
+
+public class SQLiteRepositoryFixture
 {
-    // ReSharper disable once InconsistentNaming
-    public class SQLiteRepositoryFixture
+    private readonly ConnectionStringSettings _settings;
+
+    public SQLiteRepositoryFixture()
     {
-        private readonly ConnectionStringSettings _settings;
+        Cleanup();
 
-        public SQLiteRepositoryFixture()
+        var file = string.Format("dapperRepoTest_{0}.sqlite", Guid.NewGuid().ToString("N"));
+
+        _settings = new ConnectionStringSettings
         {
-            Cleanup();
+            ConnectionString = $"Data Source=.\\{file}",
+            Name = "SQLiteDb",
+            ProviderName = "System.Data.SQLite"
+        };
 
-            var file = string.Format("dapperRepoTest_{0}.sqlite", Guid.NewGuid().ToString("N"));
+        DbProviderFactories.RegisterFactory(_settings.ProviderName, SQLiteFactory.Instance);
 
-            _settings = new ConnectionStringSettings
+        if (File.Exists(file))
+            File.Delete(file);
+
+        DapperExtensions.DapperExtensions.SqlDialect = new SqliteDialect();
+
+        var mappingAss = new[]
+        {
+            typeof(SqlServer.InvoiceMapper).Assembly
+        };
+        DapperRepository.SetMappingAssemblies(mappingAss);
+
+        var scripts = new[]
+        {
+            "CreateCustomerTable",
+            "CreateInvoiceTable"
+        };
+
+        ExecuteScripts(scripts);
+    }
+
+    public ConnectionStringSettings Settings
+    {
+        get { return _settings; }
+    }
+
+    public SQLiteConnection CreateOpenDbConnection()
+    {
+        var conn = new SQLiteConnection(_settings.ConnectionString);
+
+        if (conn.State != ConnectionState.Open)
+            conn.Open();
+
+        return conn;
+    }
+
+    private static void Cleanup()
+    {
+        try
+        {
+            var files = Directory.GetFiles(Environment.CurrentDirectory, "*.sqlite");
+            foreach (var file in files)
             {
-                ConnectionString = "Data Source=.\\{0}".Fmt(file),
-                Name = "SQLiteDb",
-                ProviderName = "System.Data.SQLite"
-            };
-
-            if (File.Exists(file))
                 File.Delete(file);
-
-            DapperExtensions.DapperExtensions.SqlDialect = new SqliteDialect();
-
-            var mappingAss = new[]
-            {
-                typeof(SqlServer.InvoiceMapper).Assembly,
-                typeof(Address).Assembly
-            };
-            DapperRepository.SetMappingAssemblies(mappingAss);
-
-            var scripts = new[]
-            {
-                "CreateCustomerTable",
-                "CreateInvoiceTable"
-            };
-
-            ExecuteScripts(scripts);
-        }
-
-        public ConnectionStringSettings Settings
-        {
-            get { return _settings; }
-        }
-
-        public SQLiteConnection CreateOpenDbConnection()
-        {
-            var conn = new SQLiteConnection(_settings.ConnectionString);
-
-            if (conn.State != ConnectionState.Open)
-                conn.Open();
-
-            return conn;
-        }
-
-        private static void Cleanup()
-        {
-            try
-            {
-                var files = Directory.GetFiles(Environment.CurrentDirectory, "*.sqlite");
-                foreach (var file in files)
-                {
-                    File.Delete(file);
-                }
-
-            }
-            catch (Exception ex)
-            {
-                ex.PrintDump();
             }
         }
-
-        void ExecuteScripts(params string[] scriptNames)
+        catch (Exception ex)
         {
-            using (var db = CreateOpenDbConnection())
-            {
-                foreach (var scriptName in scriptNames)
-                {
-                    db.Execute(Utils.ReadScriptFile(GetType(), scriptName));
-                }
+            Console.WriteLine("Error cleaning up: {0}", ex.Message);
+        }
+    }
 
-                db.Close();
-            }
+    void ExecuteScripts(params string[] scriptNames)
+    {
+        using var db = CreateOpenDbConnection();
+        foreach (var scriptName in scriptNames)
+        {
+            db.Execute(Utils.ReadScriptFile(GetType(), scriptName));
         }
     }
 }
