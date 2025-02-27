@@ -6,8 +6,6 @@ public class CustomMapper<TEntity> : ClassMapper<TEntity> where TEntity : class,
 {
     public CustomMapper()
     {
-        var type = typeof (TEntity);
-        Table(type.Name);
         Map(x => x.Id).Key(KeyType.Identity);
         AutoMap();
     }

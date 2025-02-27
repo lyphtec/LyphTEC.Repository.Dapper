@@ -4,13 +4,13 @@ using Dapper;
 
 namespace LyphTEC.Repository.Dapper;
 
-// see http://andydote.co.uk/configuring-dapper-to-work-with-custom-types/
+// see https://andydote.co.uk/2014/07/22/configuring-dapper-to-work-with-custom-types/
 
 internal class IdTypeHandler : SqlMapper.TypeHandler<dynamic>
 {
     protected IdTypeHandler() { }
 
-    public static readonly IdTypeHandler Default = new IdTypeHandler();
+    public static readonly IdTypeHandler Default = new();
 
     public override dynamic Parse(object value)
     {

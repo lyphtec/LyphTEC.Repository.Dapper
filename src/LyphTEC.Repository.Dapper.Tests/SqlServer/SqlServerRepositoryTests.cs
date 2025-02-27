@@ -61,6 +61,21 @@ public class SqlServerRepositoryTests(SqlServerRepositoryFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task SaveUpdateAsync_Customer_Ok()
+    {
+        ClearCustomerRepo();
+
+        var cust = await _customerRepo.SaveAsync(Generator.Generate<Customer>());
+        var before = cust.Email;
+
+        cust.Email = "updated@me.com";
+
+        var result = await _customerRepo.SaveAsync(cust);
+
+        Assert.NotEqual(before, result.Email);
+    }
+
+    [Fact]
     public void SaveInsert_Invoice_Ok()
     {
         ClearInvoiceRepo();
@@ -231,6 +246,7 @@ public class SqlServerRepositoryTests(SqlServerRepositoryFixture fixture) : ICla
 
         MefCustomerRepo.Save(cust);
 
+        Assert.Equal(6, cust.Id);
         Assert.Equal(6, _customerRepo.Count());
     }
 
@@ -249,5 +265,82 @@ public class SqlServerRepositoryTests(SqlServerRepositoryFixture fixture) : ICla
         Assert.Equal(1, saved.Id);
         Assert.Equal(cust.Address.City, saved.Address.City);
         Assert.Equal(dateAdded, saved.Address.DateAdded);
+    }
+
+    [Fact]
+    public void SaveMultiple_Ok()
+    {
+        ClearCustomerRepo();
+
+        var custs = Generator.Generate<Customer>(3);
+        _customerRepo.Save(custs);
+
+        var first = custs.First();
+        first.Company = "ACME";
+
+        var newCust = Generator.Generate<Customer>();
+
+        _customerRepo.Save([first, newCust]);
+
+        Assert.Equal(4, _customerRepo.Count());
+        Assert.Equal(1, first.Id);
+        Assert.Equal("ACME", _customerRepo.Get(first.Id).Company);
+        Assert.Equal(4, newCust.Id);
+    }
+
+    [Fact]
+    public void SaveMultipleGuidKey_Ok()
+    {
+        ClearInvoiceRepo();
+
+        var invoices = Generator.Generate<Invoice>(3);
+        _invoiceRepo.Save(invoices);
+
+        var first = invoices.First();
+        first.CustomerId = 345;
+
+        var newInv = Generator.Generate<Invoice>();
+
+        _invoiceRepo.Save([first, newInv]);
+
+        Assert.Equal(4, _invoiceRepo.Count());
+        Assert.Equal(345, _invoiceRepo.Get(first.Id).CustomerId);
+    }
+
+    [Fact]
+    public async Task SaveMultipleAsync_Ok()
+    {
+        ClearCustomerRepo();
+
+        var custs = Generator.Generate<Customer>(3);
+        await _customerRepo.SaveAsync(custs);
+
+        var first = custs.First();
+        first.Company = "ACME";
+
+        var newCust = Generator.Generate<Customer>();
+
+        await _customerRepo.SaveAsync([first, newCust]);
+
+        Assert.Equal(4, await _customerRepo.CountAsync());
+        Assert.Equal(1, first.Id);
+        Assert.Equal("ACME", (await _customerRepo.GetAsync(first.Id)).Company);
+        Assert.Equal(4, newCust.Id);
+    }
+
+    [Fact]
+    public void SaveUpdate_Invoice_Ok()
+    {
+        ClearInvoiceRepo();
+
+        var inv = Generator.Generate<Invoice>(x => x.CustomerId = 999);
+        _invoiceRepo.Save(inv);
+
+        inv.CustomerId = 123;
+
+        _invoiceRepo.Save(inv);
+
+        Assert.Equal(123, _invoiceRepo.Get(inv.Id).CustomerId);
+        Assert.NotEqual(999, inv.CustomerId);
     }
 }

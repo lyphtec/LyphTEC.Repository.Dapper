@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Dapper;
 using DapperExtensions;
 using DapperExtensions.Predicate;
+using LyphTEC.Repository.Extensions;
 using IClassMapper = DapperExtensions.Mapper.IClassMapper;
 
 namespace LyphTEC.Repository.Dapper;
@@ -34,6 +35,7 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
     private readonly DbProviderFactory _factory;
     private readonly string _dbConnectionString;
     private readonly bool _isInitialized;
+    private static readonly ConcurrentDictionary<Type, List<(string ColumnNamne, string DataType)>> _schemas = new();
 
     /// <summary>
     /// Instantiates a new instance of <see cref="DapperRepository{TEntity}"/>
@@ -52,6 +54,8 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
             Init();
         else
             customInit();
+
+        SaveSchema();
 
         _isInitialized = true;
     }
@@ -82,6 +86,28 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
 
         DapperExtensions.DapperExtensions.DefaultMapper = typeof (DefaultClassMapper<>);
     }
+
+    void SaveSchema()
+    {
+        if (_isInitialized) return;
+
+        var schema = _schemas.GetOrAdd(typeof(TEntity), []);
+
+        using var db = CreateDbConnection();
+
+        // TODO: This is currently specific to SQL Server (https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/sql-server-schema-collections)
+        ((DbConnection)db).GetSchema("Columns", [null, null, typeof(TEntity).Name, null])
+            .AsEnumerable()
+            .Select(row => (row.Field<string>("COLUMN_NAME"), row.Field<string>("DATA_TYPE")))
+            .ToList()
+            .ForEach(x => schema.Add(x));
+    }
+
+    /// <summary>
+    /// Gets the DB schema for the table that <typeparamref name="TEntity"/> maps to
+    /// </summary>
+    public static IReadOnlyList<(string ColumnNamne, string DataType)> Schema
+        => _schemas.GetOrAdd(typeof(TEntity), []);    
 
     #region IRepository<TEntity> Members
 
@@ -123,18 +149,16 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
         using var db = CreateDbConnection();
 
         // https://github.com/tmsmith/Dapper-Extensions/issues/315
-        var result = db.Get<TEntity>(id);
+        // var result = db.Get<TEntity>(id);
 
+        var result = db.QuerySingleOrDefault<TEntity>($"select * from [{typeof(TEntity).Name}] where Id = @Id;", new { Id = id });
         return result;
     }
 
     public void Remove(object id)
     {
-        var record = Get(id);
-        if (record == null) return;
-
         using var db = CreateDbConnection();
-        db.Delete(record);
+        db.Execute($"delete from [{typeof(TEntity).Name}] where Id = @Id;", new { Id = id });
     }
 
     public void Remove(TEntity entity)
@@ -148,7 +172,7 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
         var t = typeof(TEntity);
 
         // TODO: This assumes that our table has the same name as TEntity
-        db.Execute(string.Format("delete from {0}", t.Name));
+        db.Execute($"delete from [{t.Name}];");
     }
 
     public void RemoveByIds(System.Collections.IEnumerable ids)
@@ -166,30 +190,40 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
     {
         using var db = CreateDbConnection();
 
-        // Insert
         if (entity.Id == null)
+        {
+            SetGuidIdForInserts(entity);
             db.Insert(entity);
+        }
         else
-            db.Update(entity);
+        {
+            UpdateDateUpdated(entity);
+            db.Update(entity, ignoreAllKeyProperties: true);
+        }
 
         return entity;
     }
 
     public void Save(IEnumerable<TEntity> entities)
     {
-        // TODO: Consider using bulk insert : https://github.com/tmsmith/Dapper-Extensions/issues/18
         using var db = CreateDbConnection();
 
-        // updates
+        // updates - db.Update(IEnumerable<TEntity>) is broken :(
         foreach (var entity in entities.Where(x => x.Id != null))
         {
-            db.Update(entity);
+            UpdateDateUpdated(entity);
+            db.Update(entity, ignoreAllKeyProperties: true);
         }
 
         // inserts
-        var toInsert = entities.Where(x => x.Id == null);
-        if (toInsert.Any())
-            db.Insert(toInsert);
+        // TODO: Consider using bulk insert : https://github.com/tmsmith/Dapper-Extensions/issues/18
+        var toInsert = entities.Where(x => x.Id == null).ToList();
+
+        foreach (var entity in toInsert)
+            SetGuidIdForInserts(entity);
+
+        if (toInsert.Count > 0)
+            db.Insert<TEntity>(toInsert);
     }
 
     #endregion
@@ -231,7 +265,7 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
     public async Task<TEntity> GetAsync(object id)
     {
         using var db = CreateDbConnection();
-        var result = await db.GetAsync<TEntity>(id);
+        var result = await db.QuerySingleOrDefaultAsync<TEntity>($"select * from [{typeof(TEntity).Name}] where Id = @Id;", new { Id = id });
         return result;
     }
 
@@ -241,17 +275,16 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
         var t = typeof(TEntity);
 
         // TODO: This assumes that our table has the same name as TEntity
-        await db.ExecuteAsync(string.Format("delete from {0}", t.Name));
+        await db.ExecuteAsync($"delete from [{t.Name}];");
 
         return true;
     }
 
     public async Task<bool> RemoveAsync(object id)
     {
-        var record = await GetAsync(id);
-        if (record == null) return false;
         using var db = CreateDbConnection();
-        return await db.DeleteAsync(record);
+        var result = await db.ExecuteAsync($"delete from [{typeof(TEntity).Name}] where Id = @Id;", new { Id = id });
+        return result > 0;
     }
 
     public Task<bool> RemoveAsync(TEntity entity)
@@ -277,13 +310,18 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
         // updates
         foreach (var entity in entities.Where(x => x.Id != null))
         {
-            await db.UpdateAsync(entity);
+            UpdateDateUpdated(entity);
+            await db.UpdateAsync(entity, ignoreAllKeyProperties: true);
         }
 
         // inserts
-        var toInsert = entities.Where(x => x.Id == null);
-        if (toInsert.Any())
-            await db.InsertAsync(toInsert);
+        var toInsert = entities.Where(x => x.Id == null).ToList();
+
+        foreach (var entity in toInsert)
+            SetGuidIdForInserts(entity);
+
+        if (toInsert.Count > 0)
+            db.Insert<TEntity>(toInsert);    // await db.InsertAsync(toInsert);    // <-- async insert seems to be broken
 
         return true;
     }
@@ -293,13 +331,37 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
         using var db = CreateDbConnection();
 
         if (entity.Id == null)
-            await db.InsertAsync(entity);
+        {
+            SetGuidIdForInserts(entity);
+            db.Insert(entity);   //await db.InsertAsync(entity);    // <-- async insert seems to be broken
+        }
         else
-            await db.UpdateAsync(entity);
+        {
+            UpdateDateUpdated(entity);
+            await db.UpdateAsync(entity, ignoreAllKeyProperties: true);
+        }
 
         return entity;
     }
 
+    #endregion
+
+    #region Helpers
+
+    // For tables where the primary key is a Guid, we need to set a new value for inserts
+    static void SetGuidIdForInserts(TEntity entity)
+    {
+        var idCol = Schema.FirstOrDefault(x => x.ColumnNamne.Equals("Id", StringComparison.InvariantCultureIgnoreCase) && x.DataType.Equals("uniqueidentifier", StringComparison.InvariantCultureIgnoreCase));
+        if (idCol == default) return;
+
+        entity.Id = DapperRepository.GetNextGuid();
+    }
+
+    static void UpdateDateUpdated(TEntity obj)
+    {
+        if (obj is Entity entity)
+            entity.DateUpdatedUtc = DateTime.UtcNow;
+    }
     #endregion
 }
 
@@ -344,6 +406,8 @@ public static class DapperRepository
 
     internal static void SetDefaultMappingAssembly()
     {
+        // SqlMapper.AddTypeHandler(IdTypeHandler.Default);
+
         var ass = Assembly.GetEntryAssembly();
 
         if (ass != null)
