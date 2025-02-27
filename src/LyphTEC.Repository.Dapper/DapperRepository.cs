@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 using Dapper;
 using DapperExtensions;
 using DapperExtensions.Predicate;
-using LyphTEC.Repository.Extensions;
+using LyphTEC.Repository.Dapper.Utils;
 using IClassMapper = DapperExtensions.Mapper.IClassMapper;
 
 namespace LyphTEC.Repository.Dapper;
@@ -47,7 +47,11 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
     {
         Contract.Requires<ArgumentNullException>(settings != null && !string.IsNullOrWhiteSpace(settings.ProviderName) && !string.IsNullOrWhiteSpace(settings.ConnectionString), $"{nameof(ConnectionStringSettings)} required");
 
+#if NETSTANDARD2_1_OR_GREATER || NET462_OR_GREATER
         _factory = DbProviderFactories.GetFactory(settings.ProviderName);
+#else
+        _factory = DataAccessProvider.GetDbProviderFactory(settings.ProviderName);
+#endif
         _dbConnectionString = settings.ConnectionString;
         
         if (customInit == null)
@@ -95,12 +99,11 @@ public class DapperRepository<TEntity> : IRepository<TEntity> where TEntity : cl
 
         using var db = CreateDbConnection();
 
-        // TODO: This is currently specific to SQL Server (https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/sql-server-schema-collections)
-        ((DbConnection)db).GetSchema("Columns", [null, null, typeof(TEntity).Name, null])
-            .AsEnumerable()
-            .Select(row => (row.Field<string>("COLUMN_NAME"), row.Field<string>("DATA_TYPE")))
-            .ToList()
-            .ForEach(x => schema.Add(x));
+        // TODO: This is currently specific to SQL Server - https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/sql-server-schema-collections
+        var dt = ((DbConnection)db).GetSchema("Columns", [null, null, typeof(TEntity).Name, null]);
+
+        foreach (DataRow row in dt.Rows)
+            schema.Add((row["COLUMN_NAME"].ToString(), row["DATA_TYPE"].ToString()));
     }
 
     /// <summary>

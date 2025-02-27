@@ -19,7 +19,10 @@ public class SQLiteRepositoryTests(SQLiteRepositoryFixture fixture) : IClassFixt
     private void ClearRepo()
     {
         using var db = _fixture.CreateOpenDbConnection();
-        db.Execute("delete from [Customer]; delete from [Invoice];");
+
+        // as per -- https://stackoverflow.com/a/33257958
+        db.Execute("delete from [Customer]; update SQLITE_SEQUENCE SET seq = 0 where name = 'Customer'; VACUUM;");
+        db.Execute("delete from [Invoice]; update SQLITE_SEQUENCE SET seq = 0 where name = 'Invoice'; VACUUM;");
     }
 
     [Fact]
@@ -58,14 +61,11 @@ public class SQLiteRepositoryTests(SQLiteRepositoryFixture fixture) : IClassFixt
     {
         ClearRepo();
 
-        var invDate = new DateTime(2016, 1, 1);
         var inv = Generator.Generate<Invoice>(x => x.BillingAddress = Generator.Generate<Address>());
-
         var saved = _invoiceRepo.Save(inv);
 
         Assert.IsType<Guid>(saved.Id);
         Assert.Equal(inv.BillingAddress.City, saved.BillingAddress.City);
-        Assert.Equal(invDate, saved.InvoiceDate);
     }
 
     [Fact]
